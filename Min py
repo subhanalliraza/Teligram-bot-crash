@@ -1,0 +1,65 @@
+import websocket
+import json
+import time
+import threading
+import requests
+import os
+import sys
+
+# Telegram bot config from environment variables
+CHAT_ID = os.getenv("TELEGRAM_CHAT")
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WS_URL = os.getenv("WS_URL")
+
+if not all([CHAT_ID, BOT_TOKEN, WS_URL]):
+    print("Error: TELEGRAM_CHAT, TELEGRAM_TOKEN and WS_URL must be set", file=sys.stderr)
+    sys.exit(1)
+
+def send_telegram(msg):
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": msg}
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Telegram send error: {e}", file=sys.stderr)
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+    except json.JSONDecodeError:
+        return
+
+    # آپ یہاں Game Event detect کرنے کے لیے logic شامل کریں
+    # فرض کریں 'new_round' ایونٹ آ جائے:
+    if isinstance(data, dict) and data.get("type") == "new_round":
+        send_telegram("⚠️ نیا راؤنڈ شروع ہونے والا ہے — 10 سیکنڈ بعد!")
+        time.sleep(10)
+        send_telegram("🎯 راؤنڈ شروع ہو گیا!")
+
+def on_open(ws):
+    send_telegram("🚀 WebSocket سگنل بوٹ 🚀: شروع ہو گیا")
+
+def on_close(ws, close_status_code, close_msg):
+    send_telegram("🛑 بوٹ بند ہو گیا")
+
+def run_bot():
+    ws = websocket.WebSocketApp(
+        WS_URL,
+        on_message=on_message,
+        on_open=on_open,
+        on_close=on_close
+    )
+    ws.run_forever()
+
+if __name__ == "__main__":
+    # 10 منٹ بعد بند کرنے کے لیے تھریڈ
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+
+    # میین تھریڈ سلیپ کرے اور پھر exit
+    time.sleep(600)
+    print("10 منٹ پورے ہو گئے، بوٹ بند ہو رہا ہے...")
+    send_telegram("⌛ 10 منٹ مکمل ہو گئے — بوٹ بند ہو رہا ہے")
+    sys.exit(0)
